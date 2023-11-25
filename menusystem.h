@@ -1,86 +1,177 @@
-
-// Copyright 2019 Rich Heslip
-//
-// Author: Rich Heslip 
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-// 
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-// 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-// 
-// See http://creativecommons.org/licenses/MIT/ for more information.
-//
-// -----------------------------------------------------------------------------
-//
-// definitions for Arduino Menu System
-// https://github.com/neu-rah/ArduinoMenu/tree/master/src/menuIO
-
 //using namespace Menu;
 
 #define gfxWidth 128
 #define gfxHeight 32
 #define fontX 6    // font width in pixels
 #define fontY 10  // vertical text spacing
-#define MAX_DEPTH 2 // max menu depth?
+#define MAX_DEPTH 3 // max menu depth?
 #define textScale 1
 
-// save settings to eeprom - not yet implemented
-result  savesetup(void)
+/*
+MENU OPTIONS:
+ Global:
+  choke
+ Per Channel:
+  sample
+  level
+  attack
+  decay
+  pitch
+
+  CV_A assign (default is pitch)
+  CV_B assign (default is decay)
+  Mod Gate assign (default is accent)
+
+ One Voice mode:
+  only one channel; may have secondary sample
+  all CV and Gates route to one channel
+  Meta Mode: CV selects sample
+   - can limit selectable samples to subset of those loaded
+*/
+
+// save settings to eeprom
+result savesetup(void)
 {
+    // https://randomnerdtutorials.com/esp32-save-data-permanently-preferences/
+  prefs.begin("setup", false);  // Read-only = false
+  for (uint8_t vidx(0); vidx < 4; ++vidx)
+  {
+    Voice *pVoice = &voice[vidx];
+    switch(vidx)
+    {
+      case 0:
+        prefs.putUChar("cv_mode0", pVoice->cv_mode.D);
+        prefs.putUChar("sample0", pVoice->sample.D);
+        prefs.putUChar("mix0", pVoice->mix.D);
+        prefs.putChar("pitch0", pVoice->pitch.D);
+        prefs.putUChar("decay0", pVoice->decay.D);
+        break;
+      case 1:
+        prefs.putUChar("cv_mode1", pVoice->cv_mode.D);
+        prefs.putUChar("sample1", pVoice->sample.D);
+        prefs.putUChar("mix1", pVoice->mix.D);
+        prefs.putChar("pitch1", pVoice->pitch.D);
+        prefs.putUChar("decay1", pVoice->decay.D);
+        break;
+      case 2:
+        prefs.putUChar("cv_mode2", pVoice->cv_mode.D);
+        prefs.putUChar("sample2", pVoice->sample.D);
+        prefs.putUChar("mix2", pVoice->mix.D);
+        prefs.putChar("pitch2", pVoice->pitch.D);
+        prefs.putUChar("decay2", pVoice->decay.D);
+        break;
+      case 3:
+        prefs.putUChar("cv_mode3", pVoice->cv_mode.D);
+        prefs.putUChar("sample3", pVoice->sample.D);
+        prefs.putUChar("mix3", pVoice->mix.D);
+        prefs.putChar("pitch3", pVoice->pitch.D);
+        prefs.putUChar("decay3", pVoice->decay.D);
+        break;
+      default:
+        break;
+    }
+  }
+  prefs.end();
   return proceed;
 }
 
-TOGGLE(voice[0].cv_mode,subMenu_CV_A_MODE,"CV A  ",doNothing,noEvent,wrapStyle,
+
+result resetVoice1()
+{
+  voice[0].resetToDefaults();
+  return proceed;
+}
+result resetVoice2()
+{
+  voice[1].resetToDefaults();
+  return proceed;
+}
+result resetVoice3()
+{
+  voice[2].resetToDefaults();
+  return proceed;
+}
+result resetVoice4()
+{
+  voice[3].resetToDefaults();
+  return proceed;
+}
+
+
+SELECT(voice[0].cv_mode.D,subMenu_CV_A_MODE," CV    ",doNothing,noEvent,wrapStyle,
   VALUE("Not Assigned",NONE,doNothing,noEvent),
-  VALUE("Volume",VOLUME,doNothing,noEvent),
-  VALUE("Sample",SAMPLE,doNothing,noEvent)
+  VALUE("Sample",SAMPLE,doNothing,noEvent),
+  VALUE("Pitch",PITCH,doNothing,noEvent),
+  VALUE("Decay",DECAY,doNothing,noEvent),
+  VALUE("Volume",VOLUME,doNothing,noEvent)
 );
 
-TOGGLE(voice[1].cv_mode,subMenu_CV_B_MODE,"CV B  ",doNothing,noEvent,wrapStyle,
+SELECT(voice[1].cv_mode.D,subMenu_CV_B_MODE," CV    ",doNothing,noEvent,wrapStyle,
   VALUE("Not Assigned",NONE,doNothing,noEvent),
-  VALUE("Volume",VOLUME,doNothing,noEvent),
-  VALUE("Sample",SAMPLE,doNothing,noEvent)
+  VALUE("Sample",SAMPLE,doNothing,noEvent),
+  VALUE("Pitch",PITCH,doNothing,noEvent),
+  VALUE("Decay",DECAY,doNothing,noEvent),
+  VALUE("Volume",VOLUME,doNothing,noEvent)
 );
 
-TOGGLE(voice[2].cv_mode,subMenu_CV_C_MODE,"CV C  ",doNothing,noEvent,wrapStyle,
+SELECT(voice[2].cv_mode.D,subMenu_CV_C_MODE," CV    ",doNothing,noEvent,wrapStyle,
   VALUE("Not Assigned",NONE,doNothing,noEvent),
-  VALUE("Volume",VOLUME,doNothing,noEvent),
-  VALUE("Sample",SAMPLE,doNothing,noEvent)
+  VALUE("Sample",SAMPLE,doNothing,noEvent),
+  VALUE("Pitch",PITCH,doNothing,noEvent),
+  VALUE("Decay",DECAY,doNothing,noEvent),
+  VALUE("Volume",VOLUME,doNothing,noEvent)
 );
 
-TOGGLE(voice[3].cv_mode,subMenu_CV_D_MODE,"CV D  ",doNothing,noEvent,wrapStyle,
+SELECT(voice[3].cv_mode.D,subMenu_CV_D_MODE," CV    ",doNothing,noEvent,wrapStyle,
   VALUE("Not Assigned",NONE,doNothing,noEvent),
-  VALUE("Volume",VOLUME,doNothing,noEvent),
-  VALUE("Sample",SAMPLE,doNothing,noEvent)
+  VALUE("Sample",SAMPLE,doNothing,noEvent),
+  VALUE("Pitch",PITCH,doNothing,noEvent),
+  VALUE("Decay",DECAY,doNothing,noEvent),
+  VALUE("Volume",VOLUME,doNothing,noEvent)
 );
 
-MENU(mainMenu,"        SETUP",doNothing,noEvent,wrapStyle,
-  FIELD(voice[0].sample,"Sample A","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
-  FIELD(voice[0].mix,"Level A","",0,127,1,0,doNothing,noEvent,wrapStyle),
+MENU(voice_A,"Voice 1",doNothing,noEvent,wrapStyle,
+  FIELD(voice[0].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
+  FIELD(voice[0].pitch.D," Pitch ","",-100,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[0].decay.D," Decay ","",0,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[0].mix.D," Level ","",0,255,1,0,doNothing,noEvent,noStyle),
   SUBMENU(subMenu_CV_A_MODE),
-  FIELD(voice[1].sample,"Voice B","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
-  FIELD(voice[1].mix,"Level B","",0,127,1,0,doNothing,noEvent,wrapStyle),
+  OP("Reset to Defaults",resetVoice1,enterEvent),
+  EXIT("<Back"));
+
+MENU(voice_B,"Voice 2",doNothing,noEvent,wrapStyle,
+  FIELD(voice[1].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
+  FIELD(voice[1].pitch.D," Pitch ","",-100,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[1].decay.D," Decay ","",0,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[1].mix.D," Level ","",0,255,1,0,doNothing,noEvent,noStyle),
   SUBMENU(subMenu_CV_B_MODE),
-  FIELD(voice[2].sample,"Voice C","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
-  FIELD(voice[2].mix,"Level C","",0,127,1,0,doNothing,noEvent,wrapStyle),
+  OP("Reset to Defaults",resetVoice2,enterEvent),
+  EXIT("<Back"));
+
+MENU(voice_C,"Voice 3",doNothing,noEvent,wrapStyle,
+  FIELD(voice[2].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
+  FIELD(voice[2].pitch.D," Pitch ","",-100,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[2].decay.D," Decay ","",0,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[2].mix.D," Level ","",0,255,1,0,doNothing,noEvent,noStyle),
   SUBMENU(subMenu_CV_C_MODE),
-  FIELD(voice[3].sample,"Voice D","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
-  FIELD(voice[3].mix,"Level D","",0,127,1,0,doNothing,noEvent,wrapStyle),
+  OP("Reset to Defaults",resetVoice3,enterEvent),
+  EXIT("<Back"));
+
+MENU(voice_D,"Voice 4",doNothing,noEvent,wrapStyle,
+  FIELD(voice[3].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
+  FIELD(voice[3].pitch.D," Pitch ","",-100,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[3].decay.D," Decay ","",0,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[3].mix.D," Level ","",0,255,1,0,doNothing,noEvent,noStyle),
   SUBMENU(subMenu_CV_D_MODE),
-  OP("Save Setup",savesetup,enterEvent),
+  OP("Reset to Defaults",resetVoice4,enterEvent),
+  EXIT("<Back"));
+
+MENU(mainMenu,"        SETUP",doNothing,noEvent,noStyle,
+  SUBMENU(voice_A),
+  SUBMENU(voice_B),
+  SUBMENU(voice_C),
+  SUBMENU(voice_D),
+  OP("Update Defaults W/Changes",savesetup,enterEvent),
   EXIT("<Exit Setup Menu")
  );
 
@@ -98,7 +189,7 @@ const colorDef<uint16_t> colors[] MEMMODE={
   {{BLACK,WHITE},{WHITE,BLACK,BLACK}},//titleColor
 };
 
-//the encoder button is a keyboard with only one key 
+//the encoder button is a keyboard with only one key
 keyMap encBtn_map[]={{-ENC_SW,defaultNavCodes[enterCmd].ch}};  //negative pin numbers use internal pull-up, switch is on when low
 keyIn<1> encButton(encBtn_map);   //1 is the number of keys
 
