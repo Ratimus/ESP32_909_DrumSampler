@@ -279,8 +279,6 @@ void setup()
   RIGHT_DAC.setCS(DAC1_CS);
   LEFT_DAC.setSPIspeed(spiFreq);
   RIGHT_DAC.setSPIspeed(spiFreq);
-  LEFT_DAC.lockBus();
-  // CV_ADC.setCS(ADC_CS);
   CV_ADC.softBegin(ADC_CS);
 
   CV_ADC.setSPIspeed(2 * 1000 * 1000);
@@ -359,9 +357,7 @@ void loop()
     {
       continue;
     }
-    LEFT_DAC.unlockBus();
     CV_in[g] = (uint16_t)CV_ADC.analogRead(g);
-    LEFT_DAC.lockBus();
     voice[g].start(CV_in[g]);
   }
 
