@@ -92,51 +92,55 @@ hw_timer_t * timer1 = NULL;
 // }
 
 
-void loadPrefs(uint8_t vidx)
-{
-  prefs.begin("setup", true);  // Read-only = true
-  Voice *pVoice = &voice[vidx];
-  uint8_t cv_mode, mix, pitch, decay;
-  switch(vidx)
-  {
-    case 0:
-      pVoice->setDefaults(
-        prefs.getUChar("sample0", 0),
-        prefs.getUChar("mix0", 127),
-        prefs.getUChar("decay0", 127),
-        prefs.getChar("pitch0", 0),
-        prefs.getUChar("cv_mode0", NONE));
-      break;
-    case 1:
-      pVoice->setDefaults(
-        prefs.getUChar("sample1", 3),
-        prefs.getUChar("mix1", 127),
-        prefs.getUChar("decay1", 127),
-        prefs.getChar("pitch1", 0),
-        prefs.getUChar("cv_mode1", NONE));
-      break;
-    case 2:
-      pVoice->setDefaults(
-        prefs.getUChar("sample2", 7),
-        prefs.getUChar("mix2", 127),
-        prefs.getUChar("decay2", 127),
-        prefs.getChar("pitch2", 0),
-        prefs.getUChar("cv_mode2", NONE));
-      break;
-    case 3:
-      pVoice->setDefaults(
-        prefs.getUChar("sample3", 17),
-        prefs.getUChar("mix3", 127),
-        prefs.getUChar("decay3", 127),
-        prefs.getChar("pitch3", 0),
-        prefs.getUChar("cv_mode3", NONE));
-      break;
-    default:
-      break;
-  }
-  prefs.end();
-  Serial.printf("Loaded Channel %d with sample %d (%s)\n", vidx, pVoice->sample.Q, pVoice->pSample->sname);
-}
+// void loadPrefs(uint8_t vidx)
+// {
+//   prefs.begin("setup", true);  // Read-only = true
+//   Voice *pVoice = &voice[vidx];
+//   uint8_t cv_mode, mix, pitch, decay;
+//   switch(vidx)
+//   {
+//     case 0:
+//       pVoice->setDefaults(
+//         prefs.getUChar("sample0", 0),
+//         prefs.getUChar("mix0", 127),
+//         prefs.getUChar("decay0", 127),
+//         prefs.getChar("pitch0", 0),
+//         prefs.getUChar("cv_mode0", NONE),
+//         prefs.getUChar("envShape0", 16));
+//       break;
+//     case 1:
+//       pVoice->setDefaults(
+//         prefs.getUChar("sample1", 3),
+//         prefs.getUChar("mix1", 127),
+//         prefs.getUChar("decay1", 127),
+//         prefs.getChar("pitch1", 0),
+//         prefs.getUChar("cv_mode1", NONE),
+//         prefs.getUChar("envShape1", 16));
+//       break;
+//     case 2:
+//       pVoice->setDefaults(
+//         prefs.getUChar("sample2", 7),
+//         prefs.getUChar("mix2", 127),
+//         prefs.getUChar("decay2", 127),
+//         prefs.getChar("pitch2", 0),
+//         prefs.getUChar("cv_mode2", NONE),
+//         prefs.getUChar("envShape2", 16));
+//       break;
+//     case 3:
+//       pVoice->setDefaults(
+//         prefs.getUChar("sample3", 17),
+//         prefs.getUChar("mix3", 127),
+//         prefs.getUChar("decay3", 127),
+//         prefs.getChar("pitch3", 0),
+//         prefs.getUChar("cv_mode3", NONE),
+//         prefs.getUChar("envShape3", 16));
+//       break;
+//     default:
+//       break;
+//   }
+//   prefs.end();
+//   Serial.printf("Loaded Channel %d with sample %d (%s)\n", vidx, pVoice->sample.Q, pVoice->pSample->sname);
+// }
 
 //#include "GMsamples/samples.h"            // general MIDI set - do not run wav2header on these or it will mess up the midi mapping
 //#include "808samples/samples.h"           // 808 sounds
@@ -153,6 +157,7 @@ volatile bool gates[]{0, 0, 0, 0};
 volatile bool gateFlags[]{0, 0, 0, 0};
 volatile long timeOn[]{0, 0, 0, 0};
 volatile bool DAC_CLOCK(0);
+volatile bool do_a_sample(0);
 
 void ICACHE_RAM_ATTR onTimer0()
 {
@@ -163,7 +168,7 @@ void ICACHE_RAM_ATTR onTimer0()
 void ICACHE_RAM_ATTR onTimer1()
 {
   clickEncoder.service();
-
+  do_a_sample = 1;
   for (uint8_t g = 0; g < NUM_VOICES; ++g)
   {
     bool tmp = !directRead(gateInPins[g]);
@@ -207,24 +212,12 @@ MCP3204 CV_ADC(MISO, MOSI, SCLK);
 MCP4822 LEFT_DAC(255, SCLK, &mySpy);
 MCP4822 RIGHT_DAC(255, SCLK, &mySpy);
 
-/*
-create HW SPI bus on HSPI
-speed = 80 MHz
-for DAC:
-  write CS low
-  write 16 bits @ 80 MHz
-  write CS high
 
-for ADC:
-  write CS low
-  transfer 16 bits @ 4 MHz
-  write CS high
-
-that's it. that's all I want to do.
-*/
 // ADC readings
 const uint16_t ADC_RANGE(4095);  // 12 bit ADC
 uint16_t CV_in[4];
+uint16_t * pCV[]{&CV_in[0], &CV_in[1], &CV_in[2], &CV_in[3]};
+uint16_t ** ppCV(&pCV[0]);
 
 
 void setup()
@@ -247,6 +240,7 @@ void setup()
   display.clearDisplay();
   display.println("MORAD DRUMS Feb 3/19");
   display.display();
+
   delay(500);
 
   pinMode(GATEout_0, OUTPUT);
@@ -281,7 +275,6 @@ void setup()
   RIGHT_DAC.setSPIspeed(spiFreq);
   CV_ADC.softBegin(ADC_CS);
 
-  CV_ADC.setSPIspeed(2 * 1000 * 1000);
   Serial.printf("SPI speed L: %d\n", LEFT_DAC.getSPIspeed());
   Serial.printf("SPI speed R: %d\n", RIGHT_DAC.getSPIspeed());
   Serial.printf("Uses HW SPI = %s\n", LEFT_DAC.usesHWSPI() ? "TRUE" : "FALSE");
@@ -330,26 +323,32 @@ void doShit()
 void loop()
 {
   bool shit(0);
+  bool gateCopy[]{0, 0, 0, 0};
+  bool sampleTime(0);
   cli();
   if (DAC_CLOCK)
   {
     DAC_CLOCK = 0;
     shit = 1;
   }
-  sei();
-  if (shit)
-  {
-    doShit();
-  }
-
-  bool gateCopy[]{0, 0, 0, 0};
-  cli();
   for (uint8_t g(0); g < 4; ++g)
   {
     gateCopy[g] = gateFlags[g];
     gateFlags[g] = 0;
   }
+  sampleTime = do_a_sample;
+  do_a_sample = 0;
   sei();
+
+  if (shit)
+  {
+    doShit();
+  }
+
+  if (gateCopy[0] || gateCopy[1] || gateCopy[2] || gateCopy[3])
+  {
+    CV_ADC.readADCMultiple(ppCV);
+  }
 
   for (uint8_t g(0); g < 4; ++g)
   {
@@ -357,7 +356,8 @@ void loop()
     {
       continue;
     }
-    CV_in[g] = (uint16_t)CV_ADC.analogRead(g);
+
+    if (!(g & 1)) voice[g + 1].sampleindex = -1;
     voice[g].start(CV_in[g]);
   }
 

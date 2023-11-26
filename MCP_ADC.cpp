@@ -86,23 +86,9 @@ uint32_t MCP_ADC::count()
 }
 
 
-int16_t MCP_ADC::analogRead(uint8_t channel)
-{
-  if (channel >= _channels) return 0;
-  return readADC(channel, true);
-}
-
-
 void MCP_ADC::analogReadMultiple(uint8_t channels[], uint8_t numChannels, int16_t readings[])
 {
-  readADCMultiple(channels, numChannels, readings);
-}
-
-
-int16_t MCP_ADC::differentialRead(uint8_t channel)
-{
-  if (channel >= _channels) return 0;
-  return readADC(channel, false);
+  ;//readADCMultiple(channels, numChannels, readings);
 }
 
 
@@ -129,104 +115,78 @@ void MCP_ADC::setSPIspeed(uint32_t speed)
 
 void MCP_ADC::fastRead(uint16_t val[])
 {
-  // data[0] = 0x04;                          //  start bit
-  // if (single) data[0] |= 0x02;             //  single read | differential
-  // if (channel > 3) data[0] |= 0x01;        //  MSB channel (D2)
-  // if (channel) data[1] |= (channel << 6);  //  other 2 bits (D1 D0)
-
   for (uint8_t ch(0); ch < 4; ++ch)
   {
-    val[ch] = readADC(ch, 1);
+    val[ch] = readADC(ch);
   }
 }
 
 
-int16_t MCP_ADC::readADC(uint8_t channel, bool single)
-{
-  if (channel >= _channels) return 0;
-
-  _count++;
-
-  uint8_t  data[3] = { 0,0,0 };
-  uint8_t  bytes = buildRequest(channel, single, data);
-
-  digitalWrite(_select, LOW);
-  if (_hwSPI)
+  void MCP_ADC::softBegin(uint8_t select)
   {
-    mySPI->beginTransaction(_spi_settings);
-    for (uint8_t b = 0; b < bytes; b++)
-    {
-      data[b] = mySPI->transfer(data[b]);
-    }
-    mySPI->endTransaction();
-  }
-  else  //  Software SPI
-  {
-    for (uint8_t b = 0; b < bytes; b++)
-    {
-      data[b] = swSPI_transfer(data[b]);
-    }
-  }
-  digitalWrite(_select, HIGH);
-
-  if (bytes == 2)
-  {
-    //  combine bytes
-    int16_t raw = 256 * data[0] + data[1];
-    //  patch bit pattern MCP3001
-    if ((_channels == 1) && (_maxValue == 1023)) raw >>= 3;
-    //  patch bit pattern MCP3201
-    if ((_channels == 1) && (_maxValue == 4095)) raw >>= 1;
-    return raw & _maxValue;
-  }
-  // data[0]?
-  return ((256 * data[1] + data[2]) & _maxValue);
-}
-
-
-void MCP_ADC::readADCMultiple(uint8_t channels[], uint8_t numChannels, int16_t readings[])
-{
-  _count += numChannels;
-
-  if (_hwSPI) {
-    mySPI->beginTransaction(_spi_settings);
-  }
-
-  for (uint8_t i = 0; i < numChannels; i++) {
-
-    digitalWrite(_select, LOW);
-
-    uint8_t data[3] = {0, 0, 0};
-    uint8_t bytes = buildRequest(channels[i], true, data);
-
-    if (_hwSPI) {
-      for (uint8_t b = 0; b < bytes; b++) {
-        data[b] = mySPI->transfer(data[b]);
-      }
-    } else {
-      for (uint8_t b = 0; b < bytes; b++) {
-        data[b] = swSPI_transfer(data[b]);
-      }
-    }
-
-    if (bytes == 2) {
-      //  combine bytes
-      int16_t raw = 256 * data[0] + data[1];
-      //  patch bit pattern MCP3001
-      if ((_channels == 1) && (_maxValue == 1023)) raw >>= 3;
-      //  patch bit pattern MCP3201
-      if ((_channels == 1) && (_maxValue == 4095)) raw >>= 1;
-      readings[i] = raw & _maxValue;
-    } else {
-      readings[i] = ((256 * data[1] + data[2]) & _maxValue);
-    }
-
+    _select = select;
+    pinMode(_select, OUTPUT);
     digitalWrite(_select, HIGH);
+    digitalWrite(_select, LOW);    //  force communication See datasheet)
+    digitalWrite(_select, HIGH);
+
+    _spi_settings = SPISettings(_SPIspeed, MSBFIRST, SPI_MODE0);
+
+    _hwSPI = 1;
+    _useHSPI = 1;
+
+    digitalWrite(_dataOut, LOW);
+    digitalWrite(_clock,   LOW);
+
+    mySPI->beginTransaction(_spi_settings);
+    mySPI->endTransaction();
+    pBus = mySPI->bus();
+    data[0] = 0x06;
+    data[1] = 0;
+    data[2] = 0;
+    mySPI->beginTransaction(_spi_settings);
   }
 
-  if (_hwSPI) {
-    mySPI->endTransaction();
+
+int16_t MCP_ADC::readADC(uint8_t channel)
+{
+  // data[1] = channel;
+  // if (channel)
+  // {
+  //   data[1] <<= 6;
+  // }
+  // directWriteLow(_select);
+  // spiTransferBytes(pBus, data, out, 3);
+  // directWriteHigh(_select);
+  // return ((256 * out[1] + out[2]) & _maxValue);
+  // long start(micros());
+  uint8_t allTheData[]{0x06, 0, 0, 0x06, 0x40, 0, 0x06, 0x80, 0, 0x06, 0xC0, 0};
+  uint8_t allTheOuts[]{  0,  0, 0,   0,    0,  0,   0,    0,  0,   0,    0,  0};
+  directWriteLow(_select);
+  spiTransferBytes(pBus, allTheData, allTheOuts, 12);
+  directWriteHigh(_select);
+  // long stop(micros());
+  // Serial.printf("all 4 channels sampled in %d uS\n", stop - start);
+  return ((256 * allTheOuts[3 * channel + 1] + allTheOuts[3 * channel + 2]) & _maxValue);
+}
+
+
+void MCP_ADC::readADCMultiple(uint16_t ** readings)
+{
+  // long start(micros());
+  uint8_t allTheData[4][3]{{0x06, 0, 0}, {0x06, 0x40, 0}, {0x06, 0x80, 0}, {0x06, 0xC0, 0}};
+  uint8_t allTheOuts[4][3]{{0,    0, 0}, {0,    0,    0}, {0,    0,    0}, {0,    0,    0}};
+  for (uint8_t ch(0); ch < 4; ++ch)
+  {
+    directWriteLow(_select);
+    mySPI->transferBytes(allTheData[ch], allTheOuts[ch], 3);
+    directWriteHigh(_select);
+    *readings[ch] = (uint16_t)(256 * allTheOuts[ch][1] + allTheOuts[ch][2]) & (uint16_t)_maxValue;
   }
+  // long stop(micros());
+  // for (uint8_t ch(0); ch < 4; ++ch)
+    // Serial.printf("ch %d: %d\n", ch, *readings[ch]);
+  // Serial.printf("all 4 channels sampled in %d uS\n", stop - start);
 }
 
 
