@@ -202,28 +202,30 @@ result idle(menuOut& o,idleEvent e)
 #define MOSI 13
 #define SCLK 14
 
-MCP3204 CV_ADC(MISO, MOSI, SCLK);
 SPIClass mySpy(HSPI);
+MCP3204 CV_ADC(MISO, MOSI, SCLK);
 MCP4822 LEFT_DAC(255, SCLK, &mySpy);
 MCP4822 RIGHT_DAC(255, SCLK, &mySpy);
 
+/*
+create HW SPI bus on HSPI
+speed = 80 MHz
+for DAC:
+  write CS low
+  write 16 bits @ 80 MHz
+  write CS high
+
+for ADC:
+  write CS low
+  transfer 16 bits @ 4 MHz
+  write CS high
+
+that's it. that's all I want to do.
+*/
 // ADC readings
-const uint16_t ADC_RANGE(4097);  // 12 bit ADC
+const uint16_t ADC_RANGE(4095);  // 12 bit ADC
 uint16_t CV_in[4];
-void initADC()
-{
-  CV_ADC.begin(ADC_CS); // Chip select pin.
-  CV_ADC.setSPIspeed(4000000);
-  // while (1)
-  // {
-  //   for (uint8_t ch(0); ch < 4; ++ch)
-  //   {
-  //     Serial.printf("CH %d: %d\n", ch, CV_ADC.analogRead(ch));
-  //   }
-  //   Serial.println(" --------");
-  //   delay(100);
-  // }
-}
+
 
 void setup()
 {
@@ -247,12 +249,6 @@ void setup()
   display.display();
   delay(500);
 
-  // set up I/O pins
-  // set up SPI pins for soft SPI
-CV_ADC.begin(ADC_CS);
-  pinMode(ADC_CS, OUTPUT);
-  digitalWrite(ADC_CS, HIGH);
-
   pinMode(GATEout_0, OUTPUT);
   pinMode(GATEout_1, OUTPUT);
   pinMode(GATEout_2, OUTPUT);
@@ -273,16 +269,21 @@ CV_ADC.begin(ADC_CS);
   digitalWrite(DAC0_CS, HIGH);
   digitalWrite(DAC1_CS, HIGH);
 
+  CV_ADC.setSPI(&mySpy);
+
   uint32_t spiFreq(80 * 1000 * 1000);
   mySpy.setFrequency(spiFreq);
   SPI.setBitOrder(MSBFIRST);
-  mySpy.begin(SCLK, -1, MOSI, DAC0_CS);
+  mySpy.begin(SCLK, MISO, MOSI, DAC0_CS);
   LEFT_DAC.setCS(DAC0_CS);
   RIGHT_DAC.setCS(DAC1_CS);
   LEFT_DAC.setSPIspeed(spiFreq);
   RIGHT_DAC.setSPIspeed(spiFreq);
   LEFT_DAC.lockBus();
+  // CV_ADC.setCS(ADC_CS);
+  CV_ADC.softBegin(ADC_CS);
 
+  CV_ADC.setSPIspeed(2 * 1000 * 1000);
   Serial.printf("SPI speed L: %d\n", LEFT_DAC.getSPIspeed());
   Serial.printf("SPI speed R: %d\n", RIGHT_DAC.getSPIspeed());
   Serial.printf("Uses HW SPI = %s\n", LEFT_DAC.usesHWSPI() ? "TRUE" : "FALSE");
@@ -358,15 +359,10 @@ void loop()
     {
       continue;
     }
-    // long ts(micros());
-    // LEFT_DAC.unlockBus();
-    // initADC();
-    // CV_in[g] = CV_ADC.analogRead(g);
-    // LEFT_DAC.lockBus();
-    // ts = micros() - ts;
-    // Serial.printf("elapsed time: %d micros\n", ts);
-    // voice[g].start(CV_in[g]);
-    voice[g].start(4095);
+    LEFT_DAC.unlockBus();
+    CV_in[g] = (uint16_t)CV_ADC.analogRead(g);
+    LEFT_DAC.lockBus();
+    voice[g].start(CV_in[g]);
   }
 
   for (uint8_t g(0); g < 4; ++g)
