@@ -148,7 +148,7 @@ void loadPrefs(uint8_t vidx)
 #include <sampledefs.h>
 
 uint8_t gateInPins[]{GATEin_0, GATEin_1, GATEin_2, GATEin_3};
-uint8_t gateOutPins[]{GATEout_0, GATEout_1, GATEout_1, GATEout_3};
+uint8_t gateOutPins[]{GATEout_0, GATEout_1, GATEout_2, GATEout_3};
 volatile bool gates[]{0, 0, 0, 0};
 volatile bool gateFlags[]{0, 0, 0, 0};
 volatile long timeOn[]{0, 0, 0, 0};
@@ -371,10 +371,18 @@ void loop()
     {
       directWriteHigh(gateOutPins[g]);
       timeOn[g] = micros();
+      continue;
     }
-    else if (micros() - timeOn[g] > 100000)
+
+    if (!timeOn[g])
+    {
+      continue;
+    }
+
+    if (micros() - timeOn[g] > 100000)
     {
       directWriteLow(gateOutPins[g]);
+      timeOn[g] = 0;
     }
   }
 
