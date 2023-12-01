@@ -13,15 +13,15 @@ Preferences prefs;
 #include <menuIO/adafruitGfxOut.h>
 #include <menuIO/serialIn.h>
 #include "MORAD_IO.h"
-#include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "RAT_DAC.h"
 #include "driver/spi_master.h"
-#include <Latchable.h>
+#include "driver/spi_common.h"
 #include "SamplerVoice.h"
 #include "direct_IO.h"
 #include "MCP_ADC.h"
+
 
 const uint8_t SCREEN_WIDTH(128); // OLED display width, in pixels
 const uint8_t SCREEN_HEIGHT(32); // OLED display height, in pixels
@@ -47,100 +47,9 @@ ClickEncoderStream encStream(clickEncoder,1);
 // sample interrupt timer defs
 const uint16_t DAC_TIMER_MICROS(45);  // 22khz interrupt rate for DAC
 const uint16_t ENC_TIMER_MICROS(250); // 4khz for encoder
+
 hw_timer_t * timer0 = NULL;
 hw_timer_t * timer1 = NULL;
-
-
-// // inline
-// void Core0TaskSetup()
-// {
-
-//   Serial.printf("Core %d getting ready to shit.\n", xPortGetCoreID());
-//   delay(1000);
-//   Serial.println("let's bronze up!!!");
-//   delay(500);
-
-//   // init your stuff for core0 here
-// }
-
-// void Core0TaskLoop()
-// {
-//   // put your loop body for core0 here
-//   Serial.print("shit. ");
-//   delay(100);
-// }
-
-// void Core0Task(void *parameter)
-// {
-//   Core0TaskSetup();
-//   while (true)
-//   {
-//     Core0TaskLoop();
-
-//     // this seems necessary to trigger the watchdog
-//     // delay(1);
-//     yield();
-//   }
-// }
-
-// TaskHandle_t Core0TaskHnd;
-
-// inline
-// void Core0TaskInit()
-// {
-//   xTaskCreatePinnedToCore(Core0Task, "CoreTask0", 8000, NULL, 20, &Core0TaskHnd, 0);
-// }
-
-
-// void loadPrefs(uint8_t vidx)
-// {
-//   prefs.begin("setup", true);  // Read-only = true
-//   Voice *pVoice = &voice[vidx];
-//   uint8_t cv_mode, mix, pitch, decay;
-//   switch(vidx)
-//   {
-//     case 0:
-//       pVoice->setDefaults(
-//         prefs.getUChar("sample0", 0),
-//         prefs.getUChar("mix0", 127),
-//         prefs.getUChar("decay0", 127),
-//         prefs.getChar("pitch0", 0),
-//         prefs.getUChar("cv_mode0", NONE),
-//         prefs.getUChar("envShape0", 16));
-//       break;
-//     case 1:
-//       pVoice->setDefaults(
-//         prefs.getUChar("sample1", 3),
-//         prefs.getUChar("mix1", 127),
-//         prefs.getUChar("decay1", 127),
-//         prefs.getChar("pitch1", 0),
-//         prefs.getUChar("cv_mode1", NONE),
-//         prefs.getUChar("envShape1", 16));
-//       break;
-//     case 2:
-//       pVoice->setDefaults(
-//         prefs.getUChar("sample2", 7),
-//         prefs.getUChar("mix2", 127),
-//         prefs.getUChar("decay2", 127),
-//         prefs.getChar("pitch2", 0),
-//         prefs.getUChar("cv_mode2", NONE),
-//         prefs.getUChar("envShape2", 16));
-//       break;
-//     case 3:
-//       pVoice->setDefaults(
-//         prefs.getUChar("sample3", 17),
-//         prefs.getUChar("mix3", 127),
-//         prefs.getUChar("decay3", 127),
-//         prefs.getChar("pitch3", 0),
-//         prefs.getUChar("cv_mode3", NONE),
-//         prefs.getUChar("envShape3", 16));
-//       break;
-//     default:
-//       break;
-//   }
-//   prefs.end();
-//   Serial.printf("Loaded Channel %d with sample %d (%s)\n", vidx, pVoice->sample.Q, pVoice->pSample->sname);
-// }
 
 //#include "GMsamples/samples.h"            // general MIDI set - do not run wav2header on these or it will mess up the midi mapping
 //#include "808samples/samples.h"           // 808 sounds
@@ -156,19 +65,120 @@ uint8_t gateOutPins[]{GATEout_0, GATEout_1, GATEout_2, GATEout_3};
 volatile bool gates[]{0, 0, 0, 0};
 volatile bool gateFlags[]{0, 0, 0, 0};
 volatile long timeOn[]{0, 0, 0, 0};
-volatile bool DAC_CLOCK(0);
-volatile bool do_a_sample(0);
+
+// ADC readings
+const uint16_t ADC_RANGE(4095);  // 12 bit ADC
+uint16_t CV_in[4];
+uint16_t * pCV[]{&CV_in[0], &CV_in[1], &CV_in[2], &CV_in[3]};
+uint16_t ** ppCV(&pCV[0]);
+
+uint16_t voiceOutputBuffer[4];
+long updateTime(0);
+#define MISO 12
+#define MOSI 13
+#define SCLK 14
+
+SPIClass mySpy(HSPI);
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+#include <freertos/timers.h>
+// #include <driver/gpio.h>
+// #include <esp_system.h>
+// #include <esp_log.h>
+#include "soc/timer_group_struct.h"
+#include "soc/timer_group_reg.h"
+
+SemaphoreHandle_t dacTimer_sem;
+SemaphoreHandle_t voiceBufferAccess_sem;
+TaskHandle_t dacTaskHandle(NULL);
+TaskHandle_t voiceTaskHandle(NULL);
+
+void IRAM_ATTR voiceTask(void *param)
+{
+  voiceBufferAccess_sem = xSemaphoreCreateBinary();
+
+  while (1)
+  {
+    xSemaphoreTake(voiceBufferAccess_sem, portMAX_DELAY);
+    for (uint8_t v = 0; v < 4; ++v)
+    {
+      voice[v].tick(&voiceOutputBuffer[v]);
+    }
+  }
+}
 
 void ICACHE_RAM_ATTR onTimer0()
 {
-  DAC_CLOCK = 1;
+  static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+  xSemaphoreGiveFromISR(dacTimer_sem, &xHigherPriorityTaskWoken);
+  if (xHigherPriorityTaskWoken)
+  {
+    portYIELD_FROM_ISR(); // this wakes up dacTask immediately
+  }
 }
+
+void IRAM_ATTR dacTask(void *param)
+{
+  pinMode(DAC0_CS, OUTPUT);
+  pinMode(DAC1_CS, OUTPUT);
+
+  digitalWrite(DAC0_CS, HIGH);
+  digitalWrite(DAC1_CS, HIGH);
+
+  TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
+  TIMERG0.wdt_feed=1;
+  TIMERG0.wdt_wprotect=0;
+
+  mySpy.setBitOrder(MSBFIRST);
+  mySpy.begin(SCLK, MISO, MOSI, DAC0_CS);
+
+  dacTimer_sem = xSemaphoreCreateBinary();
+
+  timer0 = timerBegin(0, 80, true);
+  timerAttachInterrupt(timer0, &onTimer0, true);
+  timerAlarmWrite(timer0, DAC_TIMER_MICROS, true);
+  timerAlarmEnable(timer0);
+
+  SPISettings _spi_settings(80 * 1000 * 1000, MSBFIRST, SPI_MODE0);
+  mySpy.beginTransaction(_spi_settings);
+  uint16_t dacData[4];
+  while (1)
+  {
+    xSemaphoreTake(dacTimer_sem, portMAX_DELAY);
+    for (uint8_t ch(0); ch < 4; ++ch)
+    {
+      dacData[ch] = voiceOutputBuffer[ch];
+    }
+    xSemaphoreGive(voiceBufferAccess_sem);
+
+    directWriteLow( DAC0_CS);
+    mySpy.write16(0x3000 | dacData[0]);
+    directWriteHigh(DAC0_CS);
+
+    directWriteLow( DAC0_CS);
+    mySpy.write16(0xB000 | dacData[1]);
+    directWriteHigh(DAC0_CS);
+
+    directWriteLow( DAC1_CS);
+    mySpy.write16(0x3000 | dacData[2]);
+    directWriteHigh(DAC1_CS);
+
+    directWriteLow(DAC1_CS);
+    mySpy.write16(0xB000 | dacData[3]);
+    directWriteHigh(DAC1_CS);
+
+    // mySpy.setClockDivider(spiFrequencyToClockDiv(4 * 1000 * 1000));
+  }
+  mySpy.endTransaction();
+}
+
+
 
 
 void ICACHE_RAM_ATTR onTimer1()
 {
-  clickEncoder.service();
-  do_a_sample = 1;
   for (uint8_t g = 0; g < NUM_VOICES; ++g)
   {
     bool tmp = !directRead(gateInPins[g]);
@@ -181,6 +191,7 @@ void ICACHE_RAM_ATTR onTimer1()
     }
     gates[g] = tmp;
   }
+  clickEncoder.service();
 }
 
 #include "menusystem.h"  // has to follow encoder instance and sampledefs.h
@@ -190,8 +201,10 @@ void maindisplay(void)
   display.clearDisplay();
   display.setCursor(0,0);
   display.setTextColor(WHITE);
+  display.println("~~(__C* >");
   display.println();
-  display.println("             DRUMBS");
+  display.println("      RAT DRUMS");
+  display.println("            < *D__)~~");
   display.println();
   display.display();
 }
@@ -202,23 +215,6 @@ result idle(menuOut& o,idleEvent e)
   maindisplay();
   return proceed;
 }
-
-#define MISO 12
-#define MOSI 13
-#define SCLK 14
-
-SPIClass mySpy(HSPI);
-MCP3204 CV_ADC(MISO, MOSI, SCLK);
-MCP4822 LEFT_DAC(255, SCLK, &mySpy);
-MCP4822 RIGHT_DAC(255, SCLK, &mySpy);
-
-
-// ADC readings
-const uint16_t ADC_RANGE(4095);  // 12 bit ADC
-uint16_t CV_in[4];
-uint16_t * pCV[]{&CV_in[0], &CV_in[1], &CV_in[2], &CV_in[3]};
-uint16_t ** ppCV(&pCV[0]);
-
 
 void setup()
 {
@@ -238,7 +234,7 @@ void setup()
   display.setTextColor(WHITE);
   display.setCursor(0,0);
   display.clearDisplay();
-  display.println("MORAD DRUMS Feb 3/19");
+  display.println("  LET'S BRONZE UP!!!");
   display.display();
 
   delay(500);
@@ -257,38 +253,10 @@ void setup()
   pinMode(GATEin_2, INPUT);
   pinMode(GATEin_3, INPUT);
 
-  pinMode(DAC0_CS, OUTPUT);
-  pinMode(DAC1_CS, OUTPUT);
-
-  digitalWrite(DAC0_CS, HIGH);
-  digitalWrite(DAC1_CS, HIGH);
-
-  CV_ADC.setSPI(&mySpy);
-
-  uint32_t spiFreq(80 * 1000 * 1000);
-  mySpy.setFrequency(spiFreq);
-  SPI.setBitOrder(MSBFIRST);
-  mySpy.begin(SCLK, MISO, MOSI, DAC0_CS);
-  LEFT_DAC.setCS(DAC0_CS);
-  RIGHT_DAC.setCS(DAC1_CS);
-  LEFT_DAC.setSPIspeed(spiFreq);
-  RIGHT_DAC.setSPIspeed(spiFreq);
-  CV_ADC.softBegin(ADC_CS);
-
-  Serial.printf("SPI speed L: %d\n", LEFT_DAC.getSPIspeed());
-  Serial.printf("SPI speed R: %d\n", RIGHT_DAC.getSPIspeed());
-  Serial.printf("Uses HW SPI = %s\n", LEFT_DAC.usesHWSPI() ? "TRUE" : "FALSE");
-
   timer1 = timerBegin(1, 80, true);
   timerAttachInterrupt(timer1, &onTimer1, true);
   timerAlarmWrite(timer1, ENC_TIMER_MICROS, true);
   timerAlarmEnable(timer1);
-
-  // Read and load setup data
-  // Set 80 divider for prescaler (see ESP32 Technical Reference Manual for more info).
-  timer0 = timerBegin(0, 80, true);
-  timerAttachInterrupt(timer0, &onTimer0, true);
-  timerAlarmWrite(timer0, DAC_TIMER_MICROS, true);
 
   nav.idleTask=idle;//point a function to be used when menu is suspended
   nav.idleOn(); // start up in idle state
@@ -301,54 +269,41 @@ void setup()
   {
     loadPrefs(vidx);
   }
-  timerAlarmEnable(timer0);
-}
 
-uint16_t writeVal[4];
-long updateTime(0);
+  xTaskCreatePinnedToCore
+  (
+    dacTask,
+    "DAC Task",
+    4096,
+    NULL,
+    50,
+    &dacTaskHandle,
+    0
+  );
 
-void doShit()
-{
-  updateTime = micros();
-  for (uint8_t v = 0; v < 4; ++v)
-  {
-    voice[v].tick(&writeVal[v]);
-  }
-
-  LEFT_DAC.transferAB(writeVal[0], writeVal[1]);
-  RIGHT_DAC.transferAB(writeVal[2], writeVal[3]);
+  xTaskCreatePinnedToCore
+  (
+    voiceTask,
+    "voice Task",
+    4096,
+    NULL,
+    10,
+    &voiceTaskHandle,
+    1
+  );
 }
 
 
 void loop()
 {
-  bool shit(0);
   bool gateCopy[]{0, 0, 0, 0};
-  bool sampleTime(0);
   cli();
-  if (DAC_CLOCK)
-  {
-    DAC_CLOCK = 0;
-    shit = 1;
-  }
   for (uint8_t g(0); g < 4; ++g)
   {
     gateCopy[g] = gateFlags[g];
     gateFlags[g] = 0;
   }
-  sampleTime = do_a_sample;
-  do_a_sample = 0;
   sei();
-
-  if (shit)
-  {
-    doShit();
-  }
-
-  if (gateCopy[0] || gateCopy[1] || gateCopy[2] || gateCopy[3])
-  {
-    CV_ADC.readADCMultiple(ppCV);
-  }
 
   for (uint8_t g(0); g < 4; ++g)
   {
@@ -357,8 +312,8 @@ void loop()
       continue;
     }
 
-    if (!(g & 1)) voice[g + 1].sampleindex = -1;
     voice[g].start(CV_in[g]);
+    if (voice[g].choke.Q) voice[g + 1].sampleindex = -1;
   }
 
   for (uint8_t g(0); g < 4; ++g)
@@ -382,13 +337,10 @@ void loop()
     }
   }
 
-  if (micros() - updateTime > (DAC_TIMER_MICROS / 2))
+  nav.doInput();
+  if (nav.changed(0))
   {
-    nav.doInput();
-    if (nav.changed(0))
-    {
-      nav.doOutput();
-      display.display();
-    }
+    nav.doOutput();
+    display.display();
   }
 }
