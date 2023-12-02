@@ -11,5 +11,5 @@ for each sample:
   * Decay
     
 Each sample channel has a corresponding CV input, which can be freely assigned to modify any
-of the aforementioned parameters. Additionaly, the CV can be assigned to the sample selection
+of the aforementioned parameters. Additionally, the CV can be assigned to the sample selection
 for the channel.
