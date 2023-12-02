@@ -1,4 +1,30 @@
 
+// Copyright 2023 Ryan Richardson
+//
+// Author: Ratimus
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+//
+// See http://creativecommons.org/licenses/MIT/ for more information.
+//
+// -----------------------------------------------------------------------------
+//
 #include <Arduino.h>
 #include <Preferences.h>
 Preferences prefs;
@@ -12,7 +38,7 @@ Preferences prefs;
 #include <menuIO/serialOut.h>
 #include <menuIO/adafruitGfxOut.h>
 #include <menuIO/serialIn.h>
-#include "MORAD_IO.h"
+#include "RatSampler_IO.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "driver/spi_master.h"
@@ -43,11 +69,10 @@ Adafruit_SSD1306 display(
   OLED_RESET);
 
 
-// encoder
-ClickEncoder clickEncoder(ENC_A, ENC_B, ENC_SW, 4); // divide by 4 works best with my encoder
+ClickEncoder clickEncoder(ENC_A, ENC_B, ENC_SW, 4);
 ClickEncoderStream encStream(clickEncoder,1);
 
-// sample interrupt timer defs
+// Interrupt timer defs
 const uint16_t DAC_TIMER_MICROS(45);  // 22khz interrupt rate for DAC
 const uint16_t ENC_TIMER_MICROS(250); // 4khz for encoder
 
@@ -70,15 +95,10 @@ volatile bool gates[]    {0, 0, 0, 0};
 volatile long timeOn[]   {0, 0, 0, 0};
 volatile bool gateFlags[]{0, 0, 0, 0};
 
-// ADC readings
 const uint16_t ADC_RANGE(4095);  // 12 bit ADC
 uint16_t CV_in[4];
 
 uint16_t voiceOutputBuffer[4];
-long updateTime(0);
-#define MISO 12
-#define MOSI 13
-#define SCLK 14
 
 SPIClass mySpy(HSPI);
 SPISettings DAC_spi_settings(   80 * 1000 * 1000, MSBFIRST, SPI_MODE0);
@@ -91,6 +111,7 @@ SemaphoreHandle_t voiceBufferAccess_sem;
 TaskHandle_t dacTaskHandle(NULL);
 TaskHandle_t adcTaskHandle(NULL);
 TaskHandle_t voiceTaskHandle(NULL);
+
 
 void IRAM_ATTR voiceTask(void *param)
 {
@@ -204,7 +225,7 @@ void IRAM_ATTR dacTask(void *param)
     mySpy.write16(0xB000 | dacData[3]);
     directWriteHigh(DAC1_CS);
 
-    // Free the SPI bus
+    // Make like Ken Kesey and free the bus
     mySpy.endTransaction();
   }
 }
@@ -243,12 +264,14 @@ void maindisplay(void)
   display.display();
 }
 
-// When menu is suspended
+
+// Do this when menu is suspended
 result idle(menuOut& o,idleEvent e)
 {
   maindisplay();
   return proceed;
 }
+
 
 void setup()
 {
