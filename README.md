@@ -9,6 +9,7 @@ for each sample:
   * Pitch
   * Level
   * Decay
+    
 Each sample channel has a corresponding CV input, which can be freely assigned to modify any
 of the aforementioned parameters. Additionaly, the CV can be assigned to the sample selection
 for the channel.
