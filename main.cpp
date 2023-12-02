@@ -182,7 +182,7 @@ void IRAM_ATTR dacTask(void *param)
   timerAlarmEnable(sampleClock);
 
   // Fire up the HSPI
-  mySpy.begin(SCLK, MISO, MOSI, DAC0_CS);
+  mySpy.begin(SCLK, CIPO, COPI, DAC0_CS);
   mySpy.setFrequency(80 * 1000 * 1000);
   mySpy.setDataMode(SPI_MODE0);
   mySpy.setBitOrder(MSBFIRST);
