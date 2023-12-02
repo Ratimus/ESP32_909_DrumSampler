@@ -1,10 +1,10 @@
-//using namespace Menu;
+#pragma once
 
 #define gfxWidth 128
 #define gfxHeight 32
-#define fontX 6    // font width in pixels
-#define fontY 10  // vertical text spacing
-#define MAX_DEPTH 3 // max menu depth?
+#define fontX 6     // font width in pixels
+#define fontY 10    // vertical text spacing
+#define MAX_DEPTH 3 // max menu depth
 #define textScale 1
 
 /*
@@ -46,6 +46,7 @@ result savesetup(void)
         prefs.putChar("pitch0", pVoice->pitch.D);
         prefs.putUChar("decay0", pVoice->decay.D);
         prefs.putUChar("envShape0", pVoice->envShape.D);
+        prefs.putBool("choke0", pVoice->choke.D);
         break;
       case 1:
         prefs.putUChar("cv_mode1", pVoice->cv_mode.D);
@@ -62,6 +63,7 @@ result savesetup(void)
         prefs.putChar("pitch2", pVoice->pitch.D);
         prefs.putUChar("decay2", pVoice->decay.D);
         prefs.putUChar("envShape2", pVoice->envShape.D);
+        prefs.putBool("choke2", pVoice->choke.D);
         break;
       case 3:
         prefs.putUChar("cv_mode3", pVoice->cv_mode.D);
@@ -81,26 +83,10 @@ result savesetup(void)
 }
 
 
-result resetVoice1()
-{
-  voice[0].resetToDefaults();
-  return proceed;
-}
-result resetVoice2()
-{
-  voice[1].resetToDefaults();
-  return proceed;
-}
-result resetVoice3()
-{
-  voice[2].resetToDefaults();
-  return proceed;
-}
-result resetVoice4()
-{
-  voice[3].resetToDefaults();
-  return proceed;
-}
+result resetVoice1(){voice[0].resetToDefaults();  return proceed;}
+result resetVoice2(){voice[1].resetToDefaults();  return proceed;}
+result resetVoice3(){voice[2].resetToDefaults();  return proceed;}
+result resetVoice4(){voice[3].resetToDefaults();  return proceed;}
 
 
 void loadPrefs(uint8_t vidx)
@@ -193,8 +179,8 @@ SELECT(voice[3].cv_mode.D,subMenu_CV_D_MODE," CV    ",doNothing,noEvent,wrapStyl
 MENU(voice_A,"Voice 1",savesetup,exitEvent,noStyle,
   FIELD(voice[0].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
   FIELD(voice[0].pitch.D," Pitch ","",-96,96,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[0].decay.D," Decay ","",0,127,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[0].mix.D," Level ","",0,255,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[0].decay.D," Decay ","",0,255,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[0].mix.D," Level ","",0,255,10,1,doNothing,noEvent,noStyle),
   FIELD(voice[0].envShape.D," Contour ","",1,25,1,0,doNothing,noEvent,noStyle),
   FIELD(voice[0].choke.D," Choke 2 ","",0,1,1,0,doNothing,noEvent,noStyle),
   SUBMENU(subMenu_CV_A_MODE),
@@ -203,8 +189,8 @@ MENU(voice_A,"Voice 1",savesetup,exitEvent,noStyle,
 MENU(voice_B,"Voice 2",savesetup,exitEvent,noStyle,
   FIELD(voice[1].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
   FIELD(voice[1].pitch.D," Pitch ","",-96,96,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[1].decay.D," Decay ","",0,127,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[1].mix.D," Level ","",0,255,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[1].decay.D," Decay ","",0,255,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[1].mix.D," Level ","",0,255,10,1,doNothing,noEvent,noStyle),
   FIELD(voice[1].envShape.D," Contour ","",1,25,1,0,doNothing,noEvent,noStyle),
   SUBMENU(subMenu_CV_B_MODE),
   EXIT("<Back"));
@@ -212,8 +198,8 @@ MENU(voice_B,"Voice 2",savesetup,exitEvent,noStyle,
 MENU(voice_C,"Voice 3",savesetup,exitEvent,noStyle,
   FIELD(voice[2].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
   FIELD(voice[2].pitch.D," Pitch ","",-96,96,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[2].decay.D," Decay ","",0,127,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[2].mix.D," Level ","",0,255,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[2].decay.D," Decay ","",0,255,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[2].mix.D," Level ","",0,255,10,1,doNothing,noEvent,noStyle),
   FIELD(voice[2].envShape.D," Contour ","",1,25,1,0,doNothing,noEvent,noStyle),
   FIELD(voice[2].choke.D," Choke 4 ","",0,1,1,0,doNothing,noEvent,noStyle),
   SUBMENU(subMenu_CV_C_MODE),
@@ -222,8 +208,8 @@ MENU(voice_C,"Voice 3",savesetup,exitEvent,noStyle,
 MENU(voice_D,"Voice 4",savesetup,exitEvent,noStyle,
   FIELD(voice[3].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
   FIELD(voice[3].pitch.D," Pitch ","",-96,96,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[3].decay.D," Decay ","",0,127,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[3].mix.D," Level ","",0,255,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[3].decay.D," Decay ","",0,255,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[3].mix.D," Level ","",0,255,10,1,doNothing,noEvent,noStyle),
   FIELD(voice[3].envShape.D," Contour ","",1,25,1,0,doNothing,noEvent,noStyle),
   SUBMENU(subMenu_CV_D_MODE),
   EXIT("<Back"));
@@ -237,20 +223,17 @@ MENU(mainMenu,"        SETUP",doNothing,noEvent,noStyle,
  );
 
 
- //  FIELD(MIDI_Channel,"MIDI Channel","",1,16,1,0,doNothing,noEvent,wrapStyle),
-  // define menu colors --------------------------------------------------------
-//  {{disabled normal,disabled selected},{enabled normal,enabled selected, enabled editing}}
-//monochromatic color table
+// monochromatic color table
 const colorDef<uint16_t> colors[] MEMMODE={
-  {{WHITE,BLACK},{WHITE,BLACK,BLACK}},//bgColor
-  {{BLACK,WHITE},{BLACK,WHITE,WHITE}},//fgColor
-  {{BLACK,WHITE},{BLACK,WHITE,WHITE}},//valColor
-  {{BLACK,WHITE},{BLACK,WHITE,WHITE}},//unitColor
-  {{BLACK,WHITE},{WHITE,WHITE,WHITE}},//cursorColor
-  {{BLACK,WHITE},{WHITE,BLACK,BLACK}},//titleColor
+  {{WHITE,BLACK},{WHITE,BLACK,BLACK}}, // bgColor
+  {{BLACK,WHITE},{BLACK,WHITE,WHITE}}, // fgColor
+  {{BLACK,WHITE},{BLACK,WHITE,WHITE}}, // valColor
+  {{BLACK,WHITE},{BLACK,WHITE,WHITE}}, // unitColor
+  {{BLACK,WHITE},{WHITE,WHITE,WHITE}}, // cursorColor
+  {{BLACK,WHITE},{WHITE,BLACK,BLACK}}, // titleColor
 };
 
-//the encoder button is a keyboard with only one key
+// the encoder button is a keyboard with only one key
 keyMap encBtn_map[]={{-ENC_SW,defaultNavCodes[enterCmd].ch}};  //negative pin numbers use internal pull-up, switch is on when low
 keyIn<1> encButton(encBtn_map);   //1 is the number of keys
 
