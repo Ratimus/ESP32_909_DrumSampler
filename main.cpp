@@ -79,37 +79,28 @@ const uint16_t ENC_TIMER_MICROS(250); // 4khz for encoder
 hw_timer_t * sampleClock = NULL;
 hw_timer_t * timer1 = NULL;
 
-//#include "GMsamples/samples.h"            // general MIDI set - do not run wav2header on these or it will mess up the midi mapping
-//#include "808samples/samples.h"           // 808 sounds
-//#include "PNSsamples/samples.h"           // PNS soundfont set
-//#include "Angular_Jungle_Set/samples.h"   // Jungle soundfont set - great!
-//#include "WSA1_DRUMKIT/samples.h"         // WSA1 soundfont set
-//#include "Angular_Techno_Set/samples.h"   // Techno
+uint8_t gateInPins     []{ GATEin_0,  GATEin_1,  GATEin_2,  GATEin_3};
+uint8_t gateOutPins    []{GATEout_0, GATEout_1, GATEout_2, GATEout_3};
 
-#include <sampledefs.h>
-
-uint8_t gateInPins[] {GATEin_0,  GATEin_1,  GATEin_2,  GATEin_3};
-uint8_t gateOutPins[]{GATEout_0, GATEout_1, GATEout_2, GATEout_3};
-
-volatile bool gates[]    {0, 0, 0, 0};
-volatile long timeOn[]   {0, 0, 0, 0};
+volatile bool gates    []{0, 0, 0, 0};
+volatile long timeOn   []{0, 0, 0, 0};
 volatile bool gateFlags[]{0, 0, 0, 0};
 
-const uint16_t ADC_RANGE(4095);  // 12 bit ADC
-uint16_t CV_in[4];
+const uint16_t ADC_RANGE  (4095);  // 12 bit ADC
+uint16_t CV_in            [4];
 
 uint16_t voiceOutputBuffer[4];
 
-SPIClass mySpy(HSPI);
-SPISettings DAC_spi_settings(   80 * 1000 * 1000, MSBFIRST, SPI_MODE0);
-SPISettings MCP3204_spi_settings(2 * 1000 * 1000, MSBFIRST, SPI_MODE0);
+SPIClass mySpy                  (HSPI);
+SPISettings DAC_spi_settings    (80 * 1000 * 1000, MSBFIRST, SPI_MODE0);
+SPISettings MCP3204_spi_settings( 2 * 1000 * 1000, MSBFIRST, SPI_MODE0);
 
 SemaphoreHandle_t cvAdc_sem;
 SemaphoreHandle_t dacTimer_sem;
 SemaphoreHandle_t voiceBufferAccess_sem;
 
-TaskHandle_t dacTaskHandle(NULL);
-TaskHandle_t adcTaskHandle(NULL);
+TaskHandle_t dacTaskHandle  (NULL);
+TaskHandle_t adcTaskHandle  (NULL);
 TaskHandle_t voiceTaskHandle(NULL);
 
 
@@ -130,11 +121,11 @@ void IRAM_ATTR voiceTask(void *param)
 
 void IRAM_ATTR adcTask(void *param)
 {
-  uint8_t allTheData[4][3]{{0x06, 0, 0}, {0x06, 0x40, 0}, {0x06, 0x80, 0}, {0x06, 0xC0, 0}};
-  uint8_t allTheOuts[4][3]{{0,    0, 0}, {0,    0,    0}, {0,    0,    0}, {0,    0,    0}};
+  uint8_t allTheData[4][3]{{0x06,  0,  0}, {0x06, 0x40,   0}, {0x06, 0x80,   0}, {0x06, 0xC0,   0}};
+  uint8_t allTheOuts[4][3]{{   0,  0,  0}, {   0,    0,   0}, {   0,    0,   0}, {   0,    0,   0}};
   pinMode(ADC_CS, OUTPUT);
   digitalWrite(ADC_CS, HIGH);
-  digitalWrite(ADC_CS, LOW);    //  force communication (See datasheet)
+  digitalWrite(ADC_CS, LOW);    //  Force communication (See datasheet)
   digitalWrite(ADC_CS, HIGH);
   cvAdc_sem = xSemaphoreCreateBinary();
   while (1)
@@ -146,7 +137,11 @@ void IRAM_ATTR adcTask(void *param)
       directWriteLow(ADC_CS);
       mySpy.transferBytes(allTheData[ch], allTheOuts[ch], 3);
       directWriteHigh(ADC_CS);
+      #ifndef NON_INVERTING_CV
+      CV_in[ch] = ADC_RANGE - (uint16_t)(256 * allTheOuts[ch][1] + allTheOuts[ch][2]) & 4095;
+      #else
       CV_in[ch] = (uint16_t)(256 * allTheOuts[ch][1] + allTheOuts[ch][2]) & 4095;
+      #endif
     }
     mySpy.endTransaction();
   }
@@ -167,9 +162,8 @@ void ICACHE_RAM_ATTR sampleClockTick()
 // Updates DAC outputs to create audio
 void IRAM_ATTR dacTask(void *param)
 {
-  pinMode(DAC0_CS, OUTPUT);
-  pinMode(DAC1_CS, OUTPUT);
-
+  pinMode     (DAC0_CS, OUTPUT);
+  pinMode     (DAC1_CS, OUTPUT);
   digitalWrite(DAC0_CS, HIGH);
   digitalWrite(DAC1_CS, HIGH);
 
@@ -182,17 +176,17 @@ void IRAM_ATTR dacTask(void *param)
   timerAlarmEnable(sampleClock);
 
   // Fire up the HSPI
-  mySpy.begin(SCLK, CIPO, COPI, DAC0_CS);
+  mySpy.begin       (SCLK, CIPO, COPI, DAC0_CS);
   mySpy.setFrequency(80 * 1000 * 1000);
-  mySpy.setDataMode(SPI_MODE0);
-  mySpy.setBitOrder(MSBFIRST);
-  uint16_t dacData[4];
+  mySpy.setDataMode (SPI_MODE0);
+  mySpy.setBitOrder (MSBFIRST);
+  uint16_t dacData  [4];
   while (1)
   {
     // Prevent the Arduino watchdog from thinking it's being ignored
-    TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
-    TIMERG0.wdt_feed=1;
-    TIMERG0.wdt_wprotect=0;
+    TIMERG0.wdt_wprotect  = TIMG_WDT_WKEY_VALUE;
+    TIMERG0.wdt_feed      = 1;
+    TIMERG0.wdt_wprotect  = 0;
 
     // Grab the output values for all four channels
     for (uint8_t ch(0); ch < 4; ++ch)
@@ -258,7 +252,11 @@ void maindisplay(void)
   display.setTextColor(WHITE);
   display.println("~~(__C* >");
   display.println();
+#ifdef SAMPLEDEFS_909_H
+  display.println("        RAT 909");
+#else
   display.println("      RAT DRUMS");
+#endif
   display.println("            < *D__)~~");
   display.println();
   display.display();
@@ -276,7 +274,7 @@ result idle(menuOut& o,idleEvent e)
 void setup()
 {
   delay(500);
-  Serial.begin(115200);
+  // Serial.begin(115200);
   Serial.printf("ESP.getFreeHeap() %d\n", ESP.getFreeHeap());
   Serial.printf("ESP.getMinFreeHeap() %d\n", ESP.getMinFreeHeap());
   Serial.printf("ESP.getHeapSize() %d\n", ESP.getHeapSize());
@@ -286,13 +284,13 @@ void setup()
   Serial.printf("Total PSRAM: %d\n", ESP.getPsramSize());
   Serial.printf("Free PSRAM: %d\n", ESP.getFreePsram());
 
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0,0);
-  display.clearDisplay();
-  display.println("  LET'S BRONZE UP!!!");
-  display.display();
+  display.begin         (SSD1306_SWITCHCAPVCC, 0x3C);
+  display.setTextSize   (1);
+  display.setTextColor  (WHITE);
+  display.setCursor     (0,0);
+  display.clearDisplay  ();
+  display.println       ("  LET'S BRONZE UP!!!");
+  display.display       ();
   delay(500);
 
   pinMode(GATEout_0, OUTPUT);
@@ -310,10 +308,10 @@ void setup()
   pinMode(GATEin_2, INPUT);
   pinMode(GATEin_3, INPUT);
 
-  timer1 = timerBegin(1, 80, true);
+  timer1 = timerBegin (1, 80, true);
   timerAttachInterrupt(timer1, &onTimer1, true);
-  timerAlarmWrite(timer1, ENC_TIMER_MICROS, true);
-  timerAlarmEnable(timer1);
+  timerAlarmWrite     (timer1, ENC_TIMER_MICROS, true);
+  timerAlarmEnable    (timer1);
 
   nav.idleTask = idle;        //point a function to be used when menu is suspended
   nav.idleOn();               // start up in idle state
@@ -370,20 +368,20 @@ void loop()
   cli();
   for (uint8_t g(0); g < 4; ++g)
   {
-    gateCopy[g] = gateFlags[g];
-    trig |= gateCopy[g];
-    gateFlags[g] = 0;
+    gateCopy[g]   = gateFlags[g];
+    trig         |= gateCopy[g];
+    gateFlags[g]  = 0;
   }
   sei();
 
   // Read ADC
   if (trig)
   {
-    xSemaphoreTake(dacTimer_sem, portMAX_DELAY);
-    timerAlarmDisable(sampleClock);
-    xSemaphoreGiveFromISR(cvAdc_sem, NULL);
-    vTaskDelay(1);
-    timerAlarmEnable(sampleClock);
+    xSemaphoreTake        (dacTimer_sem, portMAX_DELAY);
+    timerAlarmDisable     (sampleClock);
+    xSemaphoreGiveFromISR (cvAdc_sem, NULL);
+    vTaskDelay            (1);
+    timerAlarmEnable      (sampleClock);
   }
 
   for (uint8_t g(0); g < 4; ++g)

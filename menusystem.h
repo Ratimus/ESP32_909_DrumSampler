@@ -126,41 +126,41 @@ void loadPrefs(uint8_t vidx)
     case 0:
       pVoice->setDefaults(
         prefs.getUChar("sample0", 0),
-        prefs.getUChar("mix0", 127),
-        prefs.getUChar("decay0", 127),
+        prefs.getUChar("mix0", 100),
+        prefs.getUChar("decay0", 100),
         prefs.getChar("pitch0", 0),
         prefs.getUChar("cv_mode0", NONE),
-        prefs.getUChar("envShape0", 16),
+        prefs.getUChar("envShape0", 2),
         prefs.getBool("choke0", 1));
       break;
     case 1:
       pVoice->setDefaults(
         prefs.getUChar("sample1", 3),
-        prefs.getUChar("mix1", 127),
-        prefs.getUChar("decay1", 127),
+        prefs.getUChar("mix1", 100),
+        prefs.getUChar("decay1", 100),
         prefs.getChar("pitch1", 0),
         prefs.getUChar("cv_mode1", NONE),
-        prefs.getUChar("envShape1", 16),
+        prefs.getUChar("envShape1", 2),
         false);
       break;
     case 2:
       pVoice->setDefaults(
         prefs.getUChar("sample2", 7),
-        prefs.getUChar("mix2", 127),
-        prefs.getUChar("decay2", 127),
+        prefs.getUChar("mix2", 100),
+        prefs.getUChar("decay2", 100),
         prefs.getChar("pitch2", 0),
         prefs.getUChar("cv_mode2", NONE),
-        prefs.getUChar("envShape2", 16),
+        prefs.getUChar("envShape2", 2),
         prefs.getBool("choke2", 1));
       break;
     case 3:
       pVoice->setDefaults(
         prefs.getUChar("sample3", 17),
-        prefs.getUChar("mix3", 127),
-        prefs.getUChar("decay3", 127),
+        prefs.getUChar("mix3", 100),
+        prefs.getUChar("decay3", 100),
         prefs.getChar("pitch3", 0),
         prefs.getUChar("cv_mode3", NONE),
-        prefs.getUChar("envShape3", 16),
+        prefs.getUChar("envShape3", 2),
         false);
       break;
     default:
@@ -203,41 +203,52 @@ SELECT(voice[3].cv_mode.D,subMenu_CV_D_MODE," CV    ",doNothing,noEvent,wrapStyl
   VALUE("Volume",VOLUME,doNothing,noEvent)
 );
 
+
+TOGGLE(voice[0].choke.D,subMenu_subMenu_A_chokes_B,"",doNothing,noEvent,wrapStyle,
+  VALUE(" _No_ Choke Ch. 2-->",0,doNothing,noEvent),
+  VALUE(" Choke Ch. 2     -->",1,doNothing,noEvent)
+);
+
+TOGGLE(voice[2].choke.D,subMenu_subMenu_C_chokes_D,"",doNothing,noEvent,wrapStyle,
+  VALUE(" _No_ Choke Ch. 4-->",0,doNothing,noEvent),
+  VALUE(" Choke Ch. 4     -->",1,doNothing,noEvent)
+);
+
 MENU(voice_A,"Voice 1",savesetup,exitEvent,noStyle,
   FIELD(voice[0].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
   FIELD(voice[0].pitch.D," Pitch ","",-96,96,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[0].decay.D," Decay ","",0,255,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[0].mix.D," Level ","",0,255,10,1,doNothing,noEvent,noStyle),
-  FIELD(voice[0].envShape.D," Contour ","",1,25,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[0].choke.D," Choke 2 ","",0,1,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[0].decay.D," Decay ","",0,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[0].mix.D," Level ","",0,200,10,1,doNothing,noEvent,noStyle),
+  FIELD(voice[0].envShape.D," Envelope","",0,6,1,0,doNothing,noEvent,noStyle),
+  SUBMENU(subMenu_subMenu_A_chokes_B),
   SUBMENU(subMenu_CV_A_MODE),
   EXIT("<Back"));
 
 MENU(voice_B,"Voice 2",savesetup,exitEvent,noStyle,
   FIELD(voice[1].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
   FIELD(voice[1].pitch.D," Pitch ","",-96,96,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[1].decay.D," Decay ","",0,255,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[1].mix.D," Level ","",0,255,10,1,doNothing,noEvent,noStyle),
-  FIELD(voice[1].envShape.D," Contour ","",1,25,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[1].decay.D," Decay ","",0,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[1].mix.D," Level ","",0,200,10,1,doNothing,noEvent,noStyle),
+  FIELD(voice[1].envShape.D," Envelope","",0,6,1,0,doNothing,noEvent,noStyle),
   SUBMENU(subMenu_CV_B_MODE),
   EXIT("<Back"));
 
 MENU(voice_C,"Voice 3",savesetup,exitEvent,noStyle,
   FIELD(voice[2].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
   FIELD(voice[2].pitch.D," Pitch ","",-96,96,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[2].decay.D," Decay ","",0,255,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[2].mix.D," Level ","",0,255,10,1,doNothing,noEvent,noStyle),
-  FIELD(voice[2].envShape.D," Contour ","",1,25,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[2].choke.D," Choke 4 ","",0,1,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[2].decay.D," Decay ","",0,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[2].mix.D," Level ","",0,200,10,1,doNothing,noEvent,noStyle),
+  FIELD(voice[2].envShape.D," Envelope","",0,6,1,0,doNothing,noEvent,noStyle),
+  SUBMENU(subMenu_subMenu_C_chokes_D),
   SUBMENU(subMenu_CV_C_MODE),
   EXIT("<Back"));
 
 MENU(voice_D,"Voice 4",savesetup,exitEvent,noStyle,
   FIELD(voice[3].sample.D," Sample","",0,(NUM_SAMPLES-1),1,0,doNothing,noEvent,wrapStyle),
   FIELD(voice[3].pitch.D," Pitch ","",-96,96,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[3].decay.D," Decay ","",0,255,1,0,doNothing,noEvent,noStyle),
-  FIELD(voice[3].mix.D," Level ","",0,255,10,1,doNothing,noEvent,noStyle),
-  FIELD(voice[3].envShape.D," Contour ","",1,25,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[3].decay.D," Decay ","",0,100,1,0,doNothing,noEvent,noStyle),
+  FIELD(voice[3].mix.D," Level ","",0,200,10,1,doNothing,noEvent,noStyle),
+  FIELD(voice[3].envShape.D," Envelope","",0,6,1,0,doNothing,noEvent,noStyle),
   SUBMENU(subMenu_CV_D_MODE),
   EXIT("<Back"));
 
