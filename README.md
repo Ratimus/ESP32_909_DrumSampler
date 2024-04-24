@@ -1,4 +1,4 @@
-# MORAD_DrumsPLUS
+# ESP32_909
 This is a Lo-Fi sampler running on Rich Heslip's Motivation Radio hardware platform.
 Motivation Radio (MoRad) is an ESP32-based Eurorack module with an MCP3204 12-bit, 4 channel
 ADC and two MCP4822 12-bit, 2 channel DACs.
